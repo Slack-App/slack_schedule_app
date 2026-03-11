@@ -16,7 +16,7 @@ public static class SlackEndpoints
         group.MapPost("/events", HandleEvents);
     }
 
-   
+
     private static async Task<IResult> HandleInteractions(
         HttpRequest request,
         ActionItemService service,
@@ -44,36 +44,27 @@ public static class SlackEndpoints
             await homeService.PublishHomeAsync(userId, sort: action.value);
             return Results.Ok();
         }
-        
+
         if (Guid.TryParse(action.value, out Guid itemId))
         {
-            string statusMessage = "";
-            if (action.action_id == "home_complete" || action.action_id == "complete_item")
-            {
-                await service.UpdateStatusAsync(itemId, "completed");
-                statusMessage = ":tada: *Item marked as completed!* :confetti_ball:";
-            }
-            else if (action.action_id == "home_remove" || action.action_id == "remove_item") 
-            {
-                await service.UpdateStatusAsync(itemId, "removed");
-                statusMessage = ":wastebasket: *Item removed from your list.*";
-            }
+            var newStatus = (action.action_id == "home_complete" || action.action_id == "complete_item")
+                            ? "completed" : "removed";
 
-            if (!string.IsNullOrEmpty(statusMessage))
+            var result = await service.UpdateStatusAsync(itemId, newStatus);
+
+            if (action.action_id.StartsWith("home_"))
             {
-                if (action.action_id.StartsWith("home_"))
+                await homeService.PublishHomeAsync(userId);
+            }
+            else if (!string.IsNullOrEmpty(responseUrl))
+            {
+                var client = httpClientFactory.CreateClient();
+                await client.PostAsJsonAsync(responseUrl, new
                 {
-                    await homeService.PublishHomeAsync(userId);
-                }
-                else if (!string.IsNullOrEmpty(responseUrl))
-                {
-                    var client = httpClientFactory.CreateClient();
-                    await client.PostAsJsonAsync(responseUrl, new { 
-                        text = statusMessage, 
-                        replace_original = true,
-                        response_type = "ephemeral"
-                    });
-                }
+                    text = result.Message,
+                    replace_original = true,
+                    response_type = "ephemeral"
+                });
             }
         }
 
@@ -88,17 +79,23 @@ public static class SlackEndpoints
         var userId = form["user_id"].ToString();
         var text = form["text"].ToString().Trim().ToLower();
 
-        
+
         if (!string.IsNullOrEmpty(text) && (text.StartsWith("complete") || text.StartsWith("remove")))
         {
             var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length >= 2 && Guid.TryParse(parts[1], out Guid id))
             {
                 var status = text.StartsWith("complete") ? "completed" : "removed";
-                await service.UpdateStatusAsync(id, status);
-                return Results.Json(new { text = $":tada: Item {id} marked as {status}.", response_type = "ephemeral" });
+
+                var result = await service.UpdateStatusAsync(id, status);
+
+                return Results.Json(new
+                {
+                    text = result.Message,
+                    response_type = "ephemeral"
+                });
             }
-            
+
             return Results.Json(new { text = ":warning: Usage: `/actions [complete/remove] [id]`", response_type = "ephemeral" });
         }
 

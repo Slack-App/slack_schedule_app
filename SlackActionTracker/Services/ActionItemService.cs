@@ -54,7 +54,7 @@ public class ActionItemService
                 return (false, ":x: *Item not found.* It might have been deleted or already completed.");
 
             if (item.Status == newStatus)
-                return (false, $":info: This item is already *{newStatus}*.");
+                return (false, $":information_source: This item is already *{newStatus}*.");
 
             item.Status = newStatus;
 
@@ -64,7 +64,7 @@ public class ActionItemService
                 item.RemovedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            return (true, $"Item marked as *{newStatus}*!");
+            return (true, $":tada: Item marked as *{newStatus}*!");
         }
         catch (Exception)
         {
