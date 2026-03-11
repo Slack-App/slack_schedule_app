@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var host = Environment.GetEnvironmentVariable("PGHOST");
 var port = Environment.GetEnvironmentVariable("PGPORT");
 var db = Environment.GetEnvironmentVariable("POSTGRES_DB");
 var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
@@ -13,7 +14,7 @@ var pass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
 
 var connString =
-    $"Host={databaseUrl};Database={db};Username={user};Password={pass}";
+    $"Host={host};Database={db};Username={user};Password={pass}";
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connString));
