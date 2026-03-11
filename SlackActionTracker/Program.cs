@@ -12,7 +12,7 @@ var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
 var pass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
 var connString =
-    $"Host={databaseUrl};Port={port};Database={db};Username={user};Password={pass}";
+    $"Host={databaseUrl};Database={db};Username={user};Password={pass}";
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(databaseUrl));
