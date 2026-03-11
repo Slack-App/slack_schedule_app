@@ -10,10 +10,10 @@ public class SlackHomeService
     private readonly AppDbContext _context;
     private readonly string _botToken;
 
-    public SlackHomeService(AppDbContext context, IConfiguration config)
+    public SlackHomeService(AppDbContext context)
     {
         _context = context;
-        _botToken = config["Slack:BotToken"] ?? "";
+        _botToken = Environment.GetEnvironmentVariable("SLACK_BOT_TOKEN") ?? "";
     }
 
     public async Task PublishHomeAsync(string userId, string? filter = "all", string? sort = "newest")

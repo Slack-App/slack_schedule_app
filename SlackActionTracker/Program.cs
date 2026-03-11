@@ -5,12 +5,27 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+var port = Environment.GetEnvironmentVariable("PGPORT");
+var db = Environment.GetEnvironmentVariable("POSTGRES_DB");
+var user = Environment.GetEnvironmentVariable("POSTGRES_USER");
+var pass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
+
+var connString =
+    $"Host={databaseUrl};Port={port};Database={db};Username={user};Password={pass}";
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(databaseUrl));
 
 builder.Services.AddSlackServices();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var appDbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await appDbContext.Database.MigrateAsync();
+}
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<SlackSignatureMiddleware>();

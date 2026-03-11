@@ -8,10 +8,10 @@ public class SlackSignatureMiddleware
     private readonly RequestDelegate _next;
     private readonly string _signingSecret;
 
-    public SlackSignatureMiddleware(RequestDelegate _next, IConfiguration config)
+    public SlackSignatureMiddleware(RequestDelegate _next)
     {
         this._next = _next;
-        _signingSecret = config["Slack:SigningSecret"] ?? "";
+        _signingSecret = Environment.GetEnvironmentVariable("SLACK_SIGNING_SECRET") ?? "";
     }
 
     public async Task InvokeAsync(HttpContext context)
