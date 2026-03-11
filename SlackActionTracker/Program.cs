@@ -14,10 +14,9 @@ var pass = Environment.GetEnvironmentVariable("POSTGRES_PASSWORD");
 
 var connString =
     $"Host={databaseUrl};Database={db};Username={user};Password={pass}";
-Console.WriteLine($"Database: {connString}");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(databaseUrl));
+    options.UseNpgsql(connString));
 
 builder.Services.AddSlackServices();
 
