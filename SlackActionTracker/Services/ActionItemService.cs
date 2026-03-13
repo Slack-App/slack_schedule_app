@@ -21,10 +21,10 @@ public class ActionItemService
             .ToListAsync();
     }
 
-    public async Task TryCreateFromMessage(string userId, string channelId, string extractedText, string originalFullText, ActionItemType type, string eventId, string ts)
+    public async Task<ActionItem?> TryCreateFromMessage(string userId, string channelId, string extractedText, string originalFullText, ActionItemType type, string eventId, string ts)
     {
         var exists = await _context.ActionItems.AnyAsync(a => a.SlackEventId == eventId);
-        if (exists) return;
+        if (exists) return null;
 
         var item = new ActionItem
         {
@@ -42,6 +42,7 @@ public class ActionItemService
 
         _context.ActionItems.Add(item);
         await _context.SaveChangesAsync();
+        return item;
     }
 
     public async Task<(bool Success, string Message)> UpdateStatusAsync(Guid itemId, string newStatus)
