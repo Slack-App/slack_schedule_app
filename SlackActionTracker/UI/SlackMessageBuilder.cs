@@ -1,4 +1,5 @@
 ﻿using SlackActionTracker.Domain;
+using System.Text.RegularExpressions;
 
 namespace SlackActionTracker.UI;
 
@@ -8,14 +9,15 @@ public static class SlackMessageBuilder
     {
         if (!items.Any())
         {
-            return new { 
-                response_type = "ephemeral", 
-                text = "You have no active action items. :tada:" 
+            return new
+            {
+                response_type = "ephemeral",
+                text = "You have no active action items. :tada:"
             };
         }
 
         var itemList = items.Take(20).ToList();
-        
+
         var blocks = new List<object>
         {
             new {
@@ -24,8 +26,8 @@ public static class SlackMessageBuilder
             },
             new {
                 type = "context",
-                elements = new[] { 
-                    new { type = "mrkdwn", text = $"Showing *{itemList.Count}* of *{items.Count()}* pending items." } 
+                elements = new[] {
+                    new { type = "mrkdwn", text = $"Showing *{itemList.Count}* of *{items.Count()}* pending items." }
                 }
             },
             new { type = "divider" }
@@ -39,9 +41,10 @@ public static class SlackMessageBuilder
             blocks.Add(new
             {
                 type = "section",
-                text = new { 
-                    type = "mrkdwn", 
-                    text = $"{emoji} *{item.Text}*\n_Type: {item.Type}  |  Created: {item.CreatedAt:dd MMM}_ | :id: {item.Id.ToString()}" 
+                text = new
+                {
+                    type = "mrkdwn",
+                    text = $"{emoji} {FormatItemText(item)}\n_Type: {item.Type}_ | _Created: {item.CreatedAt:dd MMM}_ | :id: {item.Id.ToString()}"
                 }
             });
 
@@ -65,10 +68,11 @@ public static class SlackMessageBuilder
 
         if (items.Count() > 20)
         {
-            blocks.Add(new {
+            blocks.Add(new
+            {
                 type = "context",
-                elements = new[] { 
-                    new { type = "mrkdwn", text = ":point_right: _Visit the *Home* tab to see all items._" } 
+                elements = new[] {
+                    new { type = "mrkdwn", text = ":point_right: _Visit the *Home* tab to see all items._" }
                 }
             });
         }
@@ -80,7 +84,7 @@ public static class SlackMessageBuilder
         };
     }
 
-    private static string GetEmoji(ActionItemType type) => type switch
+    public static string GetEmoji(ActionItemType type) => type switch
     {
         ActionItemType.Commitment => ":pencil2:",
         ActionItemType.Request => ":incoming_envelope:",
@@ -118,5 +122,21 @@ public static class SlackMessageBuilder
             value = value,
             action_id = actionId
         };
+    }
+
+    public static string FormatItemText(ActionItem item)
+    {
+        string text = item.Text;
+
+        if (item.Type == ActionItemType.Request && !string.IsNullOrEmpty(item.DueDateText))
+        {
+            text = Regex.Replace(text, Regex.Escape(item.DueDateText), "", RegexOptions.IgnoreCase);
+
+            text = text.TrimEnd('?', '.', ' ', ',').Trim();
+
+            return $"*{text}*\n:bell: *Due:* {item.DueDateText}";
+        }
+
+        return $"*{text}*";
     }
 }

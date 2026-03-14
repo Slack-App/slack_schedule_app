@@ -16,12 +16,12 @@ public class ActionItemService
     public async Task<List<ActionItem>> GetActiveItemsAsync(string userId)
     {
         return await _context.ActionItems
-            .Where(a => a.UserId == userId && a.Status == "active")
+            .Where(a => a.UserId == userId && a.Status == "active" && a.Type != ActionItemType.Deadline)
             .OrderByDescending(a => a.CreatedAt)
             .ToListAsync();
     }
 
-    public async Task<ActionItem?> TryCreateFromMessage(string userId, string channelId, string extractedText, string originalFullText, ActionItemType type, string eventId, string ts)
+    public async Task<ActionItem?> TryCreateFromMessage(string userId, string channelId, string extractedText, string originalFullText, ActionItemType type, string eventId, string ts, string? dueDateText = null)
     {
         var exists = await _context.ActionItems.AnyAsync(a => a.SlackEventId == eventId);
         if (exists) return null;
@@ -37,7 +37,8 @@ public class ActionItemService
             SlackEventId = eventId,
             Status = "active",
             CreatedAt = DateTime.UtcNow,
-            MessageTimestamp = ts
+            MessageTimestamp = ts,
+            DueDateText = dueDateText
         };
 
         _context.ActionItems.Add(item);

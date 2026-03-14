@@ -3,18 +3,18 @@ using System.Text.RegularExpressions;
 
 namespace SlackActionTracker.Parsers;
 
-public class DeadlineParser:IActionParser
+public class DeadlineParser : IActionParser
 {
     private static readonly Regex[] Patterns =
     {
         new(@"by\s+(friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today)", RegexOptions.IgnoreCase),
-        
+
         new(@"before\s+(.+)", RegexOptions.IgnoreCase),
-        
+
         new(@"by\s+end\s+of\s+(day|week|month)", RegexOptions.IgnoreCase)
     };
 
-    public (string Text, ActionItemType Type)? Parse(string message)
+    public (string Text, ActionItemType Type, string? DueDate)? Parse(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return null;
 
@@ -22,7 +22,7 @@ public class DeadlineParser:IActionParser
         {
             var match = pattern.Match(message);
             if (match.Success)
-                return (match.Value.Trim(), ActionItemType.Deadline);
+                return (match.Value.Trim(), ActionItemType.Deadline, null);
         }
         return null;
     }

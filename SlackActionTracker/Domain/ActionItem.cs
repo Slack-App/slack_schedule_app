@@ -22,5 +22,7 @@ public class ActionItem
     public DateTime? CompletedAt { get; set; }
     public DateTime? RemovedAt { get; set; }
     public string Status { get; set; } = "active"; // active, completed, removed
-    public string? MessageTimestamp { get; set; } 
+    public string? MessageTimestamp { get; set; }
+
+    public string? DueDateText { get; set; }
 }

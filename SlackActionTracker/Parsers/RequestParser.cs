@@ -5,7 +5,7 @@ namespace SlackActionTracker.Parsers;
 
 public class RequestParser : IActionParser
 {
-    private static readonly Regex[] Patterns =
+    private static readonly Regex[] RequesterPatterns =
     {
         new Regex(@"^can you (?<text>.+?)\??$", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new Regex(@"^could you (?<text>.+?)\??$", RegexOptions.IgnoreCase | RegexOptions.Compiled),
@@ -14,17 +14,40 @@ public class RequestParser : IActionParser
         new Regex(@"^would you (?<text>.+?)\??$", RegexOptions.IgnoreCase | RegexOptions.Compiled),
     };
 
-    public (string Text, ActionItemType Type)? Parse(string message)
+    private static readonly Regex[] DeadlinePatterns =
+    {
+        new(@"by\s+(friday|monday|tuesday|wednesday|thursday|saturday|sunday|tomorrow|today)", RegexOptions.IgnoreCase),
+
+        new(@"before\s+(.+)", RegexOptions.IgnoreCase),
+
+        new(@"by\s+end\s+of\s+(day|week|month)", RegexOptions.IgnoreCase)
+    };
+
+    public (string Text, ActionItemType Type, string? DueDate)? Parse(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return null;
 
-        foreach (var pattern in Patterns)
+        foreach (var pattern in RequesterPatterns)
         {
             var match = pattern.Match(message.Trim());
             if (match.Success)
             {
                 var extractedText = match.Groups["text"].Value.Trim();
-                return (extractedText, ActionItemType.Request);
+
+                string? detectedDeadline = null;
+                foreach (var deadlinePattern in DeadlinePatterns)
+                {
+                    var deadlineMatch = deadlinePattern.Match(message);
+                    if (deadlineMatch.Success)
+                    {
+                        detectedDeadline = deadlineMatch.Value
+                            .TrimEnd('?', '.', '!', ',', ';', ' ')
+                            .Trim();
+                        break;
+                    }
+                }
+
+                return (extractedText, ActionItemType.Request, detectedDeadline);
             }
         }
         return null;

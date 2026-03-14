@@ -7,7 +7,7 @@ public static class ServiceExtensions
     {
         services.AddSingleton<IActionParser, CommitmentParser>();
         services.AddSingleton<IActionParser, RequestParser>();
-        services.AddSingleton<IActionParser, DeadlineParser>();
+        // services.AddSingleton<IActionParser, DeadlineParser>();
         services.AddSingleton<IActionParser, QuestionParser>();
 
         services.AddScoped<ActionItemService>();
