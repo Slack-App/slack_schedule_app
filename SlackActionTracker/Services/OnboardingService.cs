@@ -2,11 +2,6 @@ using System.Collections.Concurrent;
 
 namespace SlackActionTracker.Services;
 
-/// <summary>
-/// Sends a one-time welcome DM when a user opens the app home for the first time.
-/// The in-memory set resets on restart, but re-sending the welcome DM on the rare
-/// occasion is harmless and preferable to adding a DB table.
-/// </summary>
 public class OnboardingService
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -22,7 +17,6 @@ public class OnboardingService
     public async Task OnboardIfNewAsync(string userId)
     {
         if (_onboardedUsers.ContainsKey(userId)) return;
-
         _onboardedUsers[userId] = true;
         _logger.LogInformation("[Onboarding] Sending welcome to new user {UserId}", userId);
         await SendWelcomeDmAsync(userId);
@@ -30,6 +24,20 @@ public class OnboardingService
 
     private async Task SendWelcomeDmAsync(string userId)
     {
+        var intro = "I automatically detect action items from your Slack conversations so nothing gets lost.";
+
+        var howTo = "*Here's how to get started:*\n\n"
+            + ":one: *Just chat normally.* I will pick up commitments, requests, and questions automatically.\n\n"
+            + ":two: *Use `/action` to add items manually.*\n\n"
+            + ":three: *Use `/actions` to see your open items* any time.\n\n"
+            + ":four: *Click ... on any message and choose Track as Action* to track a message.\n\n"
+            + ":five: *Check your Home tab* for your personal dashboard.";
+
+        var whatIDetect = "*What I detect automatically:*\n"
+            + ":pencil2: *Commitments* -- e.g. I will send that over by Friday\n"
+            + ":incoming_envelope: *Requests* -- e.g. Can you review the PR?\n"
+            + ":question: *Questions* -- Unanswered questions in channels";
+
         var blocks = new object[]
         {
             new {
@@ -38,28 +46,17 @@ public class OnboardingService
             },
             new {
                 type = "section",
-                text = new { type = "mrkdwn", text =
-                    "I automatically detect action items from your conversations and keep them organised so nothing gets lost." }
+                text = new { type = "mrkdwn", text = intro }
             },
             new { type = "divider" },
             new {
                 type = "section",
-                text = new { type = "mrkdwn", text =
-                    "*Here's how to get started:*\n\n" +
-                    ":one: *Just chat normally.* I'll pick up commitments, requests, and questions automatically.\n\n" +
-                    ":two: *Use `/action` to add items manually.* Great for tasks that come up outside Slack.\n\n" +
-                    ":three: *Use `/actions` to see your open items* any time.\n\n" +
-                    ":four: *Use the message shortcut* (click `...` on any message → *Track as Action*) to turn any message into an action item.\n\n" +
-                    ":five: *Check your Home tab* for your personal dashboard." }
+                text = new { type = "mrkdwn", text = howTo }
             },
             new { type = "divider" },
             new {
                 type = "section",
-                text = new { type = "mrkdwn", text =
-                    "*What I detect automatically:*\n" +
-                    ":pencil2: *Commitments* — "I'll send that over by Friday"\n" +
-                    ":incoming_envelope: *Requests* — "Can you review the PR?"\n" +
-                    ":question: *Questions* — Unanswered questions in channels" }
+                text = new { type = "mrkdwn", text = whatIDetect }
             },
             new {
                 type = "actions",
