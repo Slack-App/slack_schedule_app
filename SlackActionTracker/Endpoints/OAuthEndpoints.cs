@@ -1,4 +1,6 @@
 using SlackActionTracker.Services;
+using Microsoft.EntityFrameworkCore;
+using SlackActionTracker.Data;
 
 namespace SlackActionTracker.Endpoints;
 
@@ -7,6 +9,22 @@ public static class OAuthEndpoints
     public static void MapOAuthRoutes(this IEndpointRouteBuilder app)
     {
         app.MapGet("/slack/oauth/callback", HandleOAuthCallback);
+
+        // TEMPORARY - remove after running once
+        app.MapGet("/admin/migrate", async (AppDbContext db) =>
+        {
+            await db.Database.ExecuteSqlRawAsync(@"
+                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""AssigneeId"" text;
+                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""Priority"" integer NOT NULL DEFAULT 1;
+                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""DueDate"" timestamp with time zone;
+            ");
+            await db.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                VALUES ('20260315000000_AddPriorityAssigneeAndDueDate', '10.0.3')
+                ON CONFLICT DO NOTHING;
+            ");
+            return Results.Ok("Migration applied successfully.");
+        });
     }
 
     private static async Task<IResult> HandleOAuthCallback(
@@ -18,7 +36,6 @@ public static class OAuthEndpoints
         var code = request.Query["code"].ToString();
         var error = request.Query["error"].ToString();
 
-        // User declined the install
         if (!string.IsNullOrEmpty(error))
         {
             logger.LogWarning("[OAuth] Install declined: {Error}", error);
@@ -52,17 +69,12 @@ public static class OAuthEndpoints
             return Results.Redirect("https://slackscheduleapp-staging.up.railway.app/install-error");
         }
 
-        // TODO: persist json.access_token + json.team.id to your DB
-        // so your app can post to this workspace later.
-        // For now we log it — replace this with proper storage.
         logger.LogInformation("[OAuth] New install: team={TeamId} teamName={TeamName}",
             json.team?.id, json.team?.name);
 
-        // Send the installing user a welcome DM
         if (!string.IsNullOrEmpty(json.authed_user?.id))
             await onboarding.OnboardIfNewAsync(json.authed_user.id);
 
-        // Redirect to success page
         return Results.Redirect("https://slackscheduleapp-staging.up.railway.app/install-success");
     }
 
