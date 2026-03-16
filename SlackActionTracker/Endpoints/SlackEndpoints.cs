@@ -2,7 +2,6 @@ using SlackActionTracker.Services;
 using SlackActionTracker.UI;
 using SlackActionTracker.DTOs;
 using SlackActionTracker.Domain;
-using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace SlackActionTracker.Endpoints;
@@ -14,12 +13,12 @@ public static class SlackEndpoints
         var group = app.MapGroup("/slack");
 
         group.MapPost("/interactions", HandleInteractions);
-        group.MapPost("/actions", HandleActionsCommand);    // /actions slash command (list)
-        group.MapPost("/action", HandleActionCommand);      // /action slash command  (create)
+        group.MapPost("/actions", HandleActionsCommand);
+        group.MapPost("/action", HandleActionCommand);
         group.MapPost("/events", HandleEvents);
     }
 
-    // ─── Interactions (buttons, modals, shortcuts) ──────────────────────────────
+    // ─── Interactions ────────────────────────────────────────────────────────────
 
     private static async Task<IResult> HandleInteractions(
         HttpRequest request,
@@ -35,41 +34,77 @@ public static class SlackEndpoints
 
         var userId = payload.user?.id ?? "";
 
+        // Respond immediately — Slack requires response within 3 seconds
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ProcessInteractionAsync(payload, userId, service, homeService, processor, httpClientFactory);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Interactions] Background error: {ex.Message}");
+            }
+        });
+
+        return Results.Ok();
+    }
+
+    private static async Task ProcessInteractionAsync(
+        SlackInteractionPayload payload,
+        string userId,
+        ActionItemService service,
+        SlackHomeService homeService,
+        SlackEventProcessor processor,
+        IHttpClientFactory httpClientFactory)
+    {
         // ── Modal submission ──────────────────────────────────────────────────
         if (payload.type == "view_submission" && payload.view?.callback_id == "create_action_modal")
         {
             await HandleModalSubmissionAsync(payload, service, processor, httpClientFactory);
-            return Results.Ok();
+            return;
         }
 
         // ── Message shortcut ─────────────────────────────────────────────────
         if (payload.type == "message_action" && payload.callback_id == "track_message_action")
         {
             await OpenTrackMessageModalAsync(payload, httpClientFactory);
-            return Results.Ok();
+            return;
         }
 
         var action = payload?.actions?[0];
-        if (action == null) return Results.Ok();
+        if (action == null) return;
 
-        // ── Filter / sort on home tab ─────────────────────────────────────────
+        // ── Filter / sort ─────────────────────────────────────────────────────
         if (action.action_id.StartsWith("filter_"))
         {
             await homeService.PublishHomeAsync(userId, filter: action.value);
-            return Results.Ok();
+            return;
         }
 
         if (action.action_id.StartsWith("sort_"))
         {
             await homeService.PublishHomeAsync(userId, sort: action.value);
-            return Results.Ok();
+            return;
         }
-// ── Open home button ──────────────────────────────────────────────
-if (action.action_id == "open_home")
-{
-    await homeService.PublishHomeAsync(userId);
-    return Results.Ok();
-}
+
+        // ── Open home button ──────────────────────────────────────────────────
+        if (action.action_id == "open_home")
+        {
+            await homeService.PublishHomeAsync(userId);
+            if (!string.IsNullOrEmpty(payload?.response_url))
+            {
+                var client = httpClientFactory.CreateClient("Slack");
+                await client.PostAsJsonAsync(payload.response_url, new
+                {
+                    text = ":white_check_mark: Dashboard refreshed! Click the *Home* tab to view it.",
+                    response_type = "ephemeral",
+                    replace_original = false
+                });
+            }
+            return;
+        }
+
         // ── Complete / remove buttons ─────────────────────────────────────────
         if (Guid.TryParse(action.value, out Guid itemId))
         {
@@ -93,8 +128,6 @@ if (action.action_id == "open_home")
                 });
             }
         }
-
-        return Results.Ok();
     }
 
     private static async Task HandleModalSubmissionAsync(
@@ -109,7 +142,6 @@ if (action.action_id == "open_home")
         var userId = payload.user?.id ?? "";
         var channelId = payload.view?.private_metadata ?? "";
 
-        // Extract modal values
         var text = GetModalValue(values, "action_text_block", "action_text_input");
         var typeStr = GetModalValue(values, "action_type_block", "action_type_select");
         var priorityStr = GetModalValue(values, "action_priority_block", "action_priority_select");
@@ -126,7 +158,6 @@ if (action.action_id == "open_home")
             userId, channelId, text, type, priority,
             assigneeId, dueDate, dueDateStr);
 
-        // DM assignee if it's someone else
         if (!string.IsNullOrEmpty(item.AssigneeId) && item.AssigneeId != userId)
             await processor.SendAssigneeDm(item);
     }
@@ -155,7 +186,7 @@ if (action.action_id == "open_home")
             new { trigger_id = triggerId, view = modal });
     }
 
-    // ─── /actions slash command (list current items or channel board) ────────────
+    // ─── /actions slash command ───────────────────────────────────────────────
 
     private static async Task<IResult> HandleActionsCommand(
         HttpRequest request,
@@ -166,7 +197,6 @@ if (action.action_id == "open_home")
         var channelId = form["channel_id"].ToString();
         var text = form["text"].ToString().Trim().ToLower();
 
-        // /actions list — channel board
         if (text == "list" || text == "board")
         {
             var channelItems = await service.GetChannelActiveItemsAsync(channelId);
@@ -176,7 +206,6 @@ if (action.action_id == "open_home")
             return Results.Json(SlackMessageBuilder.BuildChannelBoard(channelItems));
         }
 
-        // /actions complete <id> or remove <id>
         if (text.StartsWith("complete") || text.StartsWith("remove"))
         {
             var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -189,7 +218,6 @@ if (action.action_id == "open_home")
             return Results.Json(new { text = ":warning: Usage: `/actions complete <id>` or `/actions remove <id>`", response_type = "ephemeral" });
         }
 
-        // Default — show personal list
         var items = await service.GetActiveItemsAsync(userId);
         if (!items.Any())
             return Results.Json(new { text = ":white_check_mark: You have no open action items. Great work!", response_type = "ephemeral" });
@@ -197,7 +225,7 @@ if (action.action_id == "open_home")
         return Results.Json(SlackMessageBuilder.BuildActiveItemsList(items));
     }
 
-    // ─── /action slash command (create an item) ───────────────────────────────
+    // ─── /action slash command ────────────────────────────────────────────────
 
     private static async Task<IResult> HandleActionCommand(
         HttpRequest request,
@@ -210,7 +238,6 @@ if (action.action_id == "open_home")
         var triggerId = form["trigger_id"].ToString();
         var text = form["text"].ToString().Trim();
 
-        // If text is provided, create directly
         if (!string.IsNullOrEmpty(text))
         {
             var item = await service.CreateFromModalAsync(
@@ -225,7 +252,6 @@ if (action.action_id == "open_home")
             });
         }
 
-        // No text — open the full creation modal
         var modal = new
         {
             type = "modal",
@@ -256,7 +282,6 @@ if (action.action_id == "open_home")
         var body = await reader.ReadToEndAsync();
         var json = JsonDocument.Parse(body);
 
-        // URL verification challenge
         if (json.RootElement.TryGetProperty("type", out var typeProp) &&
             typeProp.GetString() == "url_verification")
         {
@@ -266,7 +291,6 @@ if (action.action_id == "open_home")
         if (!json.RootElement.TryGetProperty("event", out var eventProp))
             return Results.Ok();
 
-        // Ignore bot messages
         if (eventProp.TryGetProperty("bot_id", out _)) return Results.Ok();
 
         var eventType = eventProp.GetProperty("type").GetString();
@@ -339,11 +363,11 @@ if (action.action_id == "open_home")
                 element = new {
                     type = "static_select",
                     action_id = "action_priority_select",
-                    initial_option = new { text = new { type = "plain_text", text = "🟡 Medium" }, value = "Medium" },
+                    initial_option = new { text = new { type = "plain_text", text = "Medium" }, value = "Medium" },
                     options = new object[] {
-                        new { text = new { type = "plain_text", text = "🔴 High" }, value = "High" },
-                        new { text = new { type = "plain_text", text = "🟡 Medium" }, value = "Medium" },
-                        new { text = new { type = "plain_text", text = "🔵 Low" }, value = "Low" }
+                        new { text = new { type = "plain_text", text = "High" }, value = "High" },
+                        new { text = new { type = "plain_text", text = "Medium" }, value = "Medium" },
+                        new { text = new { type = "plain_text", text = "Low" }, value = "Low" }
                     }
                 }
             },
@@ -354,11 +378,11 @@ if (action.action_id == "open_home")
                 element = new {
                     type = "static_select",
                     action_id = "action_type_select",
-                    initial_option = new { text = new { type = "plain_text", text = "✏️ Commitment" }, value = "Commitment" },
+                    initial_option = new { text = new { type = "plain_text", text = "Commitment" }, value = "Commitment" },
                     options = new object[] {
-                        new { text = new { type = "plain_text", text = "✏️ Commitment" }, value = "Commitment" },
-                        new { text = new { type = "plain_text", text = "📨 Request" }, value = "Request" },
-                        new { text = new { type = "plain_text", text = "❓ Question" }, value = "Question" }
+                        new { text = new { type = "plain_text", text = "Commitment" }, value = "Commitment" },
+                        new { text = new { type = "plain_text", text = "Request" }, value = "Request" },
+                        new { text = new { type = "plain_text", text = "Question" }, value = "Question" }
                     }
                 }
             }
@@ -373,18 +397,15 @@ if (action.action_id == "open_home")
         if (!values.TryGetValue(blockId, out var block)) return null;
         if (!block.TryGetValue(actionId, out var element)) return null;
 
-        // plain_text_input
         if (element.TryGetProperty("value", out var val))
             return val.GetString();
 
-        // static_select / users_select
         if (element.TryGetProperty("selected_option", out var opt))
             return opt.GetProperty("value").GetString();
 
         if (element.TryGetProperty("selected_user", out var user))
             return user.GetString();
 
-        // datepicker
         if (element.TryGetProperty("selected_date", out var date))
             return date.GetString();
 
