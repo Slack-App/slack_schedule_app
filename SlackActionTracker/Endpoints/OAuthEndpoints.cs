@@ -10,21 +10,6 @@ public static class OAuthEndpoints
     {
         app.MapGet("/slack/oauth/callback", HandleOAuthCallback);
 
-        // TEMPORARY - remove after running once
-        app.MapGet("/admin/migrate", async (AppDbContext db) =>
-        {
-            await db.Database.ExecuteSqlRawAsync(@"
-                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""AssigneeId"" text;
-                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""Priority"" integer NOT NULL DEFAULT 1;
-                ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""DueDate"" timestamp with time zone;
-            ");
-            await db.Database.ExecuteSqlRawAsync(@"
-                INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
-                VALUES ('20260315000000_AddPriorityAssigneeAndDueDate', '10.0.3')
-                ON CONFLICT DO NOTHING;
-            ");
-            return Results.Ok("Migration applied successfully.");
-        });
     }
 
     private static async Task<IResult> HandleOAuthCallback(
