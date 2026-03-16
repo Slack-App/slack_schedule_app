@@ -64,7 +64,12 @@ public static class SlackEndpoints
             await homeService.PublishHomeAsync(userId, sort: action.value);
             return Results.Ok();
         }
-
+// ── Open home button ──────────────────────────────────────────────
+if (action.action_id == "open_home")
+{
+    await homeService.PublishHomeAsync(userId);
+    return Results.Ok();
+}
         // ── Complete / remove buttons ─────────────────────────────────────────
         if (Guid.TryParse(action.value, out Guid itemId))
         {
